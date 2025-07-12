@@ -1,0 +1,383 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register Student - Smart Attendance System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .register-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 0;
+        }
+        .register-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            border-color: #667eea;
+            background-color: #f8f9fa;
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background-color: #e3f2fd;
+        }
+        .camera-container {
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #videoElement {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+        }
+        #canvasElement {
+            display: none;
+        }
+        .capture-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        .camera-controls {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'home' %}">
+                <i class="fas fa-user-check me-2"></i>Smart Attendance System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'home' %}">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'register' %}">Register</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'recognize' %}">Recognize</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'view_attendance' %}">Attendance</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Register Section -->
+    <section class="register-section">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-8 col-lg-6">
+                    <div class="register-card p-4">
+                        <div class="text-center mb-4">
+                            <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+                            <h2>Register New Student</h2>
+                            <p class="text-muted">Add a new student to the face recognition system</p>
+                        </div>
+
+                        <!-- Messages -->
+                        {% if messages %}
+                        <div class="mb-4">
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <form method="POST" enctype="multipart/form-data" id="registerForm">
+                            {% csrf_token %}
+                            
+                            <!-- Student Name -->
+                            <div class="mb-3">
+                                <label for="name" class="form-label">
+                                    <i class="fas fa-user me-2"></i>Student Name
+                                </label>
+                                <input type="text" class="form-control" id="name" name="name" 
+                                       placeholder="Enter student's full name" required>
+                            </div>
+
+                            <!-- Photo Capture Method -->
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-camera me-2"></i>Student Photo
+                                </label>
+                                <div class="btn-group w-100 mb-3" role="group">
+                                    <input type="radio" class="btn-check" name="captureMethod" id="cameraMethod" value="camera" checked>
+                                    <label class="btn btn-outline-primary" for="cameraMethod">
+                                        <i class="fas fa-camera me-2"></i>Take Photo
+                                    </label>
+                                    
+                                    <input type="radio" class="btn-check" name="captureMethod" id="uploadMethod" value="upload">
+                                    <label class="btn btn-outline-secondary" for="uploadMethod">
+                                        <i class="fas fa-upload me-2"></i>Upload File
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Camera Capture Section -->
+                            <div id="cameraSection" class="mb-4">
+                                <div class="camera-container position-relative">
+                                    <video id="videoElement" autoplay muted></video>
+                                    <canvas id="canvasElement"></canvas>
+                                    <div class="camera-controls">
+                                        <button type="button" id="startCamera" class="btn btn-success btn-sm me-2">
+                                            <i class="fas fa-play me-1"></i>Start Camera
+                                        </button>
+                                        <button type="button" id="capturePhoto" class="btn btn-primary btn-sm me-2" disabled>
+                                            <i class="fas fa-camera me-1"></i>Capture
+                                        </button>
+                                        <button type="button" id="retakePhoto" class="btn btn-warning btn-sm" style="display: none;">
+                                            <i class="fas fa-redo me-1"></i>Retake
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="capturedImage" class="mt-3" style="display: none;">
+                                    <img id="previewImg" class="img-fluid rounded" style="max-height: 200px;">
+                                </div>
+                            </div>
+
+                            <!-- File Upload Section -->
+                            <div id="uploadSection" class="mb-4" style="display: none;">
+                                <div class="upload-area" id="uploadArea">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                    <h5>Upload Student Photo</h5>
+                                    <p class="text-muted">Click to select or drag and drop an image</p>
+                                    <p class="text-muted small">Supported formats: JPG, PNG, JPEG</p>
+                                    <input type="file" id="image" name="image" accept="image/jpeg,image/png" class="d-none">
+                                </div>
+                                <div id="imagePreview" class="mt-3 d-none">
+                                    <img id="uploadPreviewImg" class="img-fluid rounded" style="max-height: 200px;">
+                                </div>
+                            </div>
+
+                            <!-- Hidden input for captured image -->
+                            <input type="hidden" id="capturedImageData" name="capturedImageData">
+
+                            <!-- Submit Button -->
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save me-2"></i>Register Student
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="text-center mt-4">
+                            <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back to Home
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let stream = null;
+        let capturedImageData = null;
+
+        // Camera elements
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startCamera');
+        const captureBtn = document.getElementById('capturePhoto');
+        const retakeBtn = document.getElementById('retakePhoto');
+        const capturedImage = document.getElementById('capturedImage');
+        const previewImg = document.getElementById('previewImg');
+
+        // Upload elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('image');
+        const imagePreview = document.getElementById('imagePreview');
+        const uploadPreviewImg = document.getElementById('uploadPreviewImg');
+
+        // Section toggles
+        const cameraSection = document.getElementById('cameraSection');
+        const uploadSection = document.getElementById('uploadSection');
+        const cameraMethod = document.getElementById('cameraMethod');
+        const uploadMethod = document.getElementById('uploadMethod');
+
+        // Method switching
+        cameraMethod.addEventListener('change', () => {
+            cameraSection.style.display = 'block';
+            uploadSection.style.display = 'none';
+            resetForm();
+        });
+
+        uploadMethod.addEventListener('change', () => {
+            cameraSection.style.display = 'none';
+            uploadSection.style.display = 'block';
+            resetForm();
+        });
+
+        // Camera functionality
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    } 
+                });
+                
+                video.srcObject = stream;
+                startBtn.disabled = true;
+                captureBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Error accessing camera. Please make sure you have granted camera permissions.');
+            }
+        });
+
+        captureBtn.addEventListener('click', () => {
+            if (stream) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert to base64
+                capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
+                previewImg.src = capturedImageData;
+                
+                // Show captured image and retake button
+                capturedImage.style.display = 'block';
+                captureBtn.style.display = 'none';
+                retakeBtn.style.display = 'inline-block';
+                
+                // Set hidden input
+                document.getElementById('capturedImageData').value = capturedImageData;
+            }
+        });
+
+        retakeBtn.addEventListener('click', () => {
+            capturedImage.style.display = 'none';
+            captureBtn.style.display = 'inline-block';
+            retakeBtn.style.display = 'none';
+            capturedImageData = null;
+            document.getElementById('capturedImageData').value = '';
+        });
+
+        // File upload handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    uploadPreviewImg.src = e.target.result;
+                    imagePreview.classList.remove('d-none');
+                    uploadArea.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert('Please select a valid image file.');
+            }
+        }
+
+        function resetForm() {
+            // Reset camera
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            startBtn.disabled = false;
+            captureBtn.disabled = true;
+            capturedImage.style.display = 'none';
+            captureBtn.style.display = 'inline-block';
+            retakeBtn.style.display = 'none';
+            capturedImageData = null;
+            document.getElementById('capturedImageData').value = '';
+
+            // Reset upload
+            imagePreview.classList.add('d-none');
+            uploadArea.style.display = 'block';
+            fileInput.value = '';
+        }
+
+        // Form validation
+        document.getElementById('registerForm').addEventListener('submit', function(e) {
+            const name = document.getElementById('name').value.trim();
+            const captureMethod = document.querySelector('input[name="captureMethod"]:checked').value;
+            
+            if (!name) {
+                e.preventDefault();
+                alert('Please enter the student name.');
+                return;
+            }
+
+            if (captureMethod === 'camera' && !capturedImageData) {
+                e.preventDefault();
+                alert('Please capture a photo using the camera.');
+                return;
+            }
+
+            if (captureMethod === 'upload' && !fileInput.files[0]) {
+                e.preventDefault();
+                alert('Please select a student photo.');
+                return;
+            }
+        });
+    </script>
+</body>
+</html>
